@@ -23,7 +23,7 @@ spec.loader.exec_module(habit_processor)
 process_habit_image = habit_processor.process_habit_image
 
 app = FastAPI(
-    title="Habit Image Processing API",
+    title="bordi.ai Image Processing API",
     description="API for processing habit tracking images with cropping and classification",
     version="1.0.0"
 )
@@ -68,7 +68,7 @@ class ProcessImageResponse(BaseModel):
 async def root():
     """Root endpoint with API information"""
     return {
-        "message": "Habit Image Processing API",
+        "message": "bordi.ai Image Processing API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health"
