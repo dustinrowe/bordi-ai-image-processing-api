@@ -154,8 +154,10 @@ def process_habit_image(user_id: str, image_url: str):
     resp = requests.get(img_url)
     img = Image.open(io.BytesIO(resp.content)).convert('RGB')
 
-    # Roboflow API endpoint
-    roboflow_url = "https://classify.roboflow.com/ischecked-onblp/5?api_key=n6ff5cSCNfbFLjLKhGyF"
+    # Roboflow API endpoint - get from environment variable
+    roboflow_url = os.getenv('ROBOFLOW_API_URL')
+    if not roboflow_url:
+        raise ValueError("ROBOFLOW_API_URL environment variable is required")
 
     # Create directory for cropped images in Downloads folder
     downloads_path = os.path.expanduser("~/Downloads")
