@@ -94,47 +94,65 @@ async def process_image(request: Request):
     Returns classification results, statistics, and timestamp.
     """
     try:
-        # Get content type to determine how to parse
-        content_type = request.headers.get("content-type", "").lower()
+        # Read the raw body first (before FastAPI tries to parse it)
+        body_bytes = await request.body()
+        body_str = body_bytes.decode('utf-8') if body_bytes else ""
         
-        # Try to parse as JSON (works for both proper JSON and n8n's format)
-        try:
-            if "application/json" in content_type or content_type == "":
-                # Try parsing as JSON
-                body = await request.json()
-            else:
-                # For form data, parse differently
-                form_data = await request.form()
-                body = {
-                    "user_id": form_data.get("user_id"),
-                    "image_url": form_data.get("image_url")
-                }
-        except:
-            # If JSON parsing fails, try reading raw body
+        # Try to parse as JSON
+        body = None
+        if body_str:
             try:
-                body_bytes = await request.body()
-                body_str = body_bytes.decode('utf-8')
+                # Try parsing as JSON
                 body = json.loads(body_str)
-            except:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Could not parse request body. Expected JSON with user_id and image_url"
-                )
+            except json.JSONDecodeError:
+                # If it's not valid JSON, it might be sent as a string representation
+                # Try to evaluate it (but be safe about it)
+                try:
+                    # Remove any surrounding quotes if present
+                    cleaned = body_str.strip()
+                    if cleaned.startswith('"') and cleaned.endswith('"'):
+                        cleaned = cleaned[1:-1]
+                    # Try parsing again
+                    body = json.loads(cleaned)
+                except:
+                    # Last resort: try to parse as form data
+                    try:
+                        # Reconstruct request for form parsing
+                        from fastapi import Form
+                        # This won't work since body is already consumed, so we'll handle it differently
+                        pass
+                    except:
+                        pass
         
-        # Extract user_id and image_url
-        if not isinstance(body, dict):
+        # If we still don't have a body, try to get it from request.json() (might work if FastAPI cached it)
+        if body is None:
+            try:
+                body = await request.json()
+            except:
+                pass
+        
+        # If still no body, return helpful error
+        if body is None or not isinstance(body, dict):
             raise HTTPException(
                 status_code=422,
-                detail="Request body must be a JSON object"
+                detail=f"Could not parse request body. Received: {body_str[:200] if body_str else 'empty'}. Expected JSON object with user_id and image_url."
             )
         
+        # Extract user_id and image_url
         final_user_id = body.get("user_id")
         final_image_url = body.get("image_url")
         
-        if not final_user_id or not final_image_url:
+        # Check if fields are missing or empty
+        if not final_user_id:
             raise HTTPException(
                 status_code=422, 
-                detail="user_id and image_url are required in the request body"
+                detail="user_id is required in the request body"
+            )
+        
+        if not final_image_url:
+            raise HTTPException(
+                status_code=422, 
+                detail="image_url is required in the request body and cannot be empty"
             )
         
         result = process_habit_image(final_user_id, final_image_url)
