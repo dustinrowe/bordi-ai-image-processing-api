@@ -4,7 +4,7 @@ Run with: uvicorn api_server:app --host 0.0.0.0 --port 8000
 Or: python api_server.py
 """
 
-from fastapi import FastAPI, HTTPException, Form, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
@@ -83,51 +83,53 @@ async def health_check():
 
 
 @app.post("/process-image", response_model=ProcessImageResponse)
-async def process_image(
-    request: Request,
-    json_body: Optional[ProcessImageRequest] = None,
-    user_id: Optional[str] = Form(None),
-    image_url: Optional[str] = Form(None)
-):
+async def process_image(request: Request):
     """
     Process a habit tracking image by cropping cells and classifying them.
     
-    Accepts JSON body, form data, or raw JSON string:
+    Accepts JSON body (with or without Content-Type header):
     - **user_id**: The user ID to look up crop values in image_crop_values table
     - **image_url**: The URL of the image to process
     
     Returns classification results, statistics, and timestamp.
     """
     try:
-        final_user_id = None
-        final_image_url = None
+        # Get content type to determine how to parse
+        content_type = request.headers.get("content-type", "").lower()
         
-        # Try to get from Pydantic model (proper JSON with Content-Type)
-        if json_body:
-            final_user_id = json_body.user_id
-            final_image_url = str(json_body.image_url)
-        # Try form data
-        elif user_id and image_url:
-            final_user_id = user_id
-            final_image_url = image_url
-        else:
-            # Try to parse raw body as JSON (for n8n without proper Content-Type)
-            try:
+        # Try to parse as JSON (works for both proper JSON and n8n's format)
+        try:
+            if "application/json" in content_type or content_type == "":
+                # Try parsing as JSON
                 body = await request.json()
-                if "user_id" in body and "image_url" in body:
-                    final_user_id = body["user_id"]
-                    final_image_url = body["image_url"]
+            else:
+                # For form data, parse differently
+                form_data = await request.form()
+                body = {
+                    "user_id": form_data.get("user_id"),
+                    "image_url": form_data.get("image_url")
+                }
+        except:
+            # If JSON parsing fails, try reading raw body
+            try:
+                body_bytes = await request.body()
+                body_str = body_bytes.decode('utf-8')
+                body = json.loads(body_str)
             except:
-                # If JSON parsing fails, try reading as bytes and parsing
-                try:
-                    body_bytes = await request.body()
-                    body_str = body_bytes.decode('utf-8')
-                    body = json.loads(body_str)
-                    if "user_id" in body and "image_url" in body:
-                        final_user_id = body["user_id"]
-                        final_image_url = body["image_url"]
-                except:
-                    pass
+                raise HTTPException(
+                    status_code=422,
+                    detail="Could not parse request body. Expected JSON with user_id and image_url"
+                )
+        
+        # Extract user_id and image_url
+        if not isinstance(body, dict):
+            raise HTTPException(
+                status_code=422,
+                detail="Request body must be a JSON object"
+            )
+        
+        final_user_id = body.get("user_id")
+        final_image_url = body.get("image_url")
         
         if not final_user_id or not final_image_url:
             raise HTTPException(
