@@ -4,13 +4,12 @@ Run with: uvicorn api_server:app --host 0.0.0.0 --port 8000
 Or: python api_server.py
 """
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
 import sys
 import os
-import json
 
 # Import the processing function from the existing module
 # Handle filename with spaces by using importlib
@@ -83,82 +82,19 @@ async def health_check():
 
 
 @app.post("/process-image", response_model=ProcessImageResponse)
-async def process_image(request: Request):
+async def process_image(request_body: ProcessImageRequest):
     """
     Process a habit tracking image by cropping cells and classifying them.
     
-    Accepts JSON body (with or without Content-Type header):
+    Accepts JSON body:
     - **user_id**: The user ID to look up crop values in image_crop_values table
     - **image_url**: The URL of the image to process
     
     Returns classification results, statistics, and timestamp.
     """
     try:
-        # Read the raw body first (before FastAPI tries to parse it)
-        body_bytes = await request.body()
-        body_str = body_bytes.decode('utf-8') if body_bytes else ""
-        
-        # Try to parse as JSON
-        body = None
-        if body_str:
-            try:
-                # Try parsing as JSON
-                body = json.loads(body_str)
-            except json.JSONDecodeError:
-                # If it's not valid JSON, it might be sent as a string representation
-                # Try to evaluate it (but be safe about it)
-                try:
-                    # Remove any surrounding quotes if present
-                    cleaned = body_str.strip()
-                    if cleaned.startswith('"') and cleaned.endswith('"'):
-                        cleaned = cleaned[1:-1]
-                    # Try parsing again
-                    body = json.loads(cleaned)
-                except:
-                    # Last resort: try to parse as form data
-                    try:
-                        # Reconstruct request for form parsing
-                        from fastapi import Form
-                        # This won't work since body is already consumed, so we'll handle it differently
-                        pass
-                    except:
-                        pass
-        
-        # If we still don't have a body, try to get it from request.json() (might work if FastAPI cached it)
-        if body is None:
-            try:
-                body = await request.json()
-            except:
-                pass
-        
-        # If still no body, return helpful error
-        if body is None or not isinstance(body, dict):
-            raise HTTPException(
-                status_code=422,
-                detail=f"Could not parse request body. Received: {body_str[:200] if body_str else 'empty'}. Expected JSON object with user_id and image_url."
-            )
-        
-        # Extract user_id and image_url
-        final_user_id = body.get("user_id")
-        final_image_url = body.get("image_url")
-        
-        # Check if fields are missing or empty
-        if not final_user_id:
-            raise HTTPException(
-                status_code=422, 
-                detail="user_id is required in the request body"
-            )
-        
-        if not final_image_url:
-            raise HTTPException(
-                status_code=422, 
-                detail="image_url is required in the request body and cannot be empty"
-            )
-        
-        result = process_habit_image(final_user_id, final_image_url)
+        result = process_habit_image(request_body.user_id, str(request_body.image_url))
         return result
-    except HTTPException:
-        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
