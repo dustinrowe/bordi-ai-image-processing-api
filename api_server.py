@@ -4,12 +4,13 @@ Run with: uvicorn api_server:app --host 0.0.0.0 --port 8000
 Or: python api_server.py
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
 import sys
 import os
+import json
 
 # Import the processing function from the existing module
 # Handle filename with spaces by using importlib
@@ -82,19 +83,62 @@ async def health_check():
 
 
 @app.post("/process-image", response_model=ProcessImageResponse)
-async def process_image(request: ProcessImageRequest):
+async def process_image(
+    request: Request,
+    json_body: Optional[ProcessImageRequest] = None,
+    user_id: Optional[str] = Form(None),
+    image_url: Optional[str] = Form(None)
+):
     """
     Process a habit tracking image by cropping cells and classifying them.
     
+    Accepts JSON body, form data, or raw JSON string:
     - **user_id**: The user ID to look up crop values in image_crop_values table
     - **image_url**: The URL of the image to process
     
     Returns classification results, statistics, and timestamp.
     """
     try:
-        # Convert HttpUrl to string for the processing function
-        result = process_habit_image(request.user_id, str(request.image_url))
+        final_user_id = None
+        final_image_url = None
+        
+        # Try to get from Pydantic model (proper JSON with Content-Type)
+        if json_body:
+            final_user_id = json_body.user_id
+            final_image_url = str(json_body.image_url)
+        # Try form data
+        elif user_id and image_url:
+            final_user_id = user_id
+            final_image_url = image_url
+        else:
+            # Try to parse raw body as JSON (for n8n without proper Content-Type)
+            try:
+                body = await request.json()
+                if "user_id" in body and "image_url" in body:
+                    final_user_id = body["user_id"]
+                    final_image_url = body["image_url"]
+            except:
+                # If JSON parsing fails, try reading as bytes and parsing
+                try:
+                    body_bytes = await request.body()
+                    body_str = body_bytes.decode('utf-8')
+                    body = json.loads(body_str)
+                    if "user_id" in body and "image_url" in body:
+                        final_user_id = body["user_id"]
+                        final_image_url = body["image_url"]
+                except:
+                    pass
+        
+        if not final_user_id or not final_image_url:
+            raise HTTPException(
+                status_code=422, 
+                detail="user_id and image_url are required in the request body"
+            )
+        
+        result = process_habit_image(final_user_id, final_image_url)
         return result
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
