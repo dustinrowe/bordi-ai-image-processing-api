@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+*.json
+!requirements.txt
+!package.json
+!package-lock.json
+cropped_cells_*/
+roboflow_results_*.json
+test_response.json
+table_extraction_results/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+
+# Logs
+*.log
+logs/
+
+# Downloads folder (if tracking)
+~/Downloads/cropped_cells_*/
+~/Downloads/roboflow_results_*.json
+
+archived code/

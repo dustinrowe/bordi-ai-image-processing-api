@@ -1,0 +1,16 @@
+# API Server dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# Image processing dependencies
+Pillow>=10.0.0
+numpy>=1.24.0
+requests>=2.31.0
+
+# Database dependencies
+supabase>=2.0.0
+
+# Optional OCR dependencies (if needed)
+paddleocr>=2.7.0
+paddlepaddle>=2.5.1 
