@@ -2,16 +2,35 @@ import json
 import os
 from typing import Dict, List, Tuple
 
-import cv2
 import numpy as np
+from PIL import Image, ImageFilter
+
+
+def convolve2d(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    kernel = kernel.astype(np.float32)
+    kh, kw = kernel.shape
+    pad_h = kh // 2
+    pad_w = kw // 2
+    padded = np.pad(image, ((pad_h, pad_h), (pad_w, pad_w)), mode="reflect")
+    shape = (image.shape[0], image.shape[1], kh, kw)
+    strides = (
+        padded.strides[0],
+        padded.strides[1],
+        padded.strides[0],
+        padded.strides[1],
+    )
+    windows = np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides)
+    return np.einsum("ijkl,kl->ij", windows, kernel)
 
 
 def blur_score(gray: np.ndarray) -> float:
-    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    laplacian_kernel = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=np.float32)
+    lap = convolve2d(gray, laplacian_kernel)
+    return float(lap.var())
 
 
 def readability_prefilter(
-    img_bgr: np.ndarray,
+    img_rgb: np.ndarray,
     min_mean: float = 100.0,
     max_blur: float = 20.0,
     max_noise: float = 1.0,
@@ -19,22 +38,32 @@ def readability_prefilter(
     # Hard-coded crop to remove fixed white borders.
     # These values are tuned for the Manage Asset Drilldown images (2500x2900).
     x1, x2 = 500, 2056
-    h, w = img_bgr.shape[:2]
+    h, w = img_rgb.shape[:2]
     x1_clamped = max(0, min(x1, w))
     x2_clamped = max(0, min(x2, w))
     if x2_clamped > x1_clamped:
-        img_bgr = img_bgr[:, x1_clamped:x2_clamped]
+        img_rgb = img_rgb[:, x1_clamped:x2_clamped]
 
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    gray = (
+        0.299 * img_rgb[:, :, 0]
+        + 0.587 * img_rgb[:, :, 1]
+        + 0.114 * img_rgb[:, :, 2]
+    ).astype(np.float32)
 
     mean = float(gray.mean())
     std = float(gray.std())
     blur = blur_score(gray)
-    blue_mean = float(img_bgr[:, :, 0].mean())
+    blue_mean = float(img_rgb[:, :, 2].mean())
     dark_pixel_ratio = float((gray < 15).mean())
-    edges = cv2.Canny(gray, 50, 150)
-    edge_density = float((edges > 0).mean())
-    high_freq = cv2.subtract(gray, cv2.GaussianBlur(gray, (5, 5), 0))
+    sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+    sobel_y = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
+    gx = convolve2d(gray, sobel_x)
+    gy = convolve2d(gray, sobel_y)
+    edge_mag = np.sqrt(gx**2 + gy**2)
+    edge_density = float((edge_mag > 100).mean())
+    gray_uint8 = np.clip(gray, 0, 255).astype(np.uint8)
+    blur_gray = np.array(Image.fromarray(gray_uint8).filter(ImageFilter.GaussianBlur(radius=1)))
+    high_freq = gray - blur_gray.astype(np.float32)
     noise_estimate = float(high_freq.std())
 
     metrics = {
@@ -63,13 +92,14 @@ def check_images(
             results.append({"path": path, "ok": False, "error": "missing"})
             continue
 
-        img_bgr = cv2.imread(path)
-        if img_bgr is None:
+        try:
+            img_rgb = np.array(Image.open(path).convert("RGB"))
+        except Exception:
             results.append({"path": path, "ok": False, "error": "unreadable"})
             continue
 
         ok, metrics = readability_prefilter(
-            img_bgr, min_mean=min_mean, max_blur=max_blur, max_noise=max_noise
+            img_rgb, min_mean=min_mean, max_blur=max_blur, max_noise=max_noise
         )
         results.append(
             {

@@ -11,8 +11,9 @@ from typing import List, Optional
 import sys
 import os
 import requests
-import cv2
 import numpy as np
+from PIL import Image
+import io
 
 # Import the processing function from the existing module
 # Handle filename with spaces by using importlib
@@ -162,9 +163,9 @@ async def quality_check(request_body: QualityCheckRequest):
         try:
             response = requests.get(str(image_url), timeout=15)
             response.raise_for_status()
-            data = np.frombuffer(response.content, dtype=np.uint8)
-            img_bgr = cv2.imdecode(data, cv2.IMREAD_COLOR)
-            if img_bgr is None:
+            img = Image.open(io.BytesIO(response.content)).convert("RGB")
+            img_rgb = np.array(img)
+            if img_rgb.size == 0:
                 results.append(
                     QualityCheckResult(
                         image_url=str(image_url),
@@ -175,7 +176,7 @@ async def quality_check(request_body: QualityCheckRequest):
                 )
                 continue
 
-            ok, metrics = readability_prefilter(img_bgr)
+            ok, metrics = readability_prefilter(img_rgb)
             results.append(
                 QualityCheckResult(
                     image_url=str(image_url),
