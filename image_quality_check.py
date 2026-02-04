@@ -33,7 +33,7 @@ def readability_prefilter(
     img_rgb: np.ndarray,
     min_mean: float = 100.0,
     max_blur: float = 25.0,
-    max_noise: float = 1.0,
+    max_noise: float = 1.5,
 ) -> Tuple[bool, Dict[str, float]]:
     # Hard-coded crop to remove fixed white borders.
     # These values are tuned for the Manage Asset Drilldown images (2500x2900).
@@ -73,7 +73,7 @@ def check_images(
     image_paths: List[str],
     min_mean: float = 100.0,
     max_blur: float = 25.0,
-    max_noise: float = 1.0,
+    max_noise: float = 1.5,
 ) -> None:
     results = []
     for path in image_paths:
