@@ -7,9 +7,12 @@ Or: python api_server.py
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
-from typing import Optional
+from typing import List, Optional
 import sys
 import os
+import requests
+import cv2
+import numpy as np
 
 # Import the processing function from the existing module
 # Handle filename with spaces by using importlib
@@ -21,6 +24,15 @@ spec = importlib.util.spec_from_file_location(
 habit_processor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(habit_processor)
 process_habit_image = habit_processor.process_habit_image
+
+# Import image quality checker
+quality_spec = importlib.util.spec_from_file_location(
+    "image_quality_check",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "image_quality_check.py")
+)
+quality_checker = importlib.util.module_from_spec(quality_spec)
+quality_spec.loader.exec_module(quality_checker)
+readability_prefilter = quality_checker.readability_prefilter
 
 app = FastAPI(
     title="bordi.ai Image Processing API",
@@ -62,6 +74,29 @@ class ProcessImageResponse(BaseModel):
     total_false: int
     results: list
     cropped_images_directory: str
+
+
+class QualityCheckRequest(BaseModel):
+    image_urls: List[HttpUrl]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "image_urls": [
+                    "https://res.cloudinary.com/db6fegsqa/image/upload/v1770151294/snnpozu2gyfp4kc4mw0a.jpg",
+                    "https://res.cloudinary.com/db6fegsqa/image/upload/v1770167953/axjknikvdjkvjk6qcfop.jpg",
+                    "https://res.cloudinary.com/db6fegsqa/image/upload/v1770163705/pmmmrk4o8qvjnqb63tda.jpg",
+                    "https://res.cloudinary.com/db6fegsqa/image/upload/v1770139038/f1ruw5okmqmocbux7wok.jpg"
+                ]
+            }
+        }
+
+
+class QualityCheckResult(BaseModel):
+    image_url: str
+    ok: bool
+    metrics: dict
+    error: Optional[str] = None
 
 
 @app.get("/")
@@ -114,6 +149,60 @@ async def process_image_get(user_id: str, image_url: str):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.post("/quality-check", response_model=List[QualityCheckResult])
+async def quality_check(request_body: QualityCheckRequest):
+    """
+    Evaluate image quality for multiple images.
+    Returns pass/fail plus metrics for each image.
+    """
+    results: List[QualityCheckResult] = []
+    for image_url in request_body.image_urls:
+        try:
+            response = requests.get(str(image_url), timeout=15)
+            response.raise_for_status()
+            data = np.frombuffer(response.content, dtype=np.uint8)
+            img_bgr = cv2.imdecode(data, cv2.IMREAD_COLOR)
+            if img_bgr is None:
+                results.append(
+                    QualityCheckResult(
+                        image_url=str(image_url),
+                        ok=False,
+                        metrics={},
+                        error="unreadable"
+                    )
+                )
+                continue
+
+            ok, metrics = readability_prefilter(img_bgr)
+            results.append(
+                QualityCheckResult(
+                    image_url=str(image_url),
+                    ok=ok,
+                    metrics=metrics,
+                )
+            )
+        except requests.RequestException:
+            results.append(
+                QualityCheckResult(
+                    image_url=str(image_url),
+                    ok=False,
+                    metrics={},
+                    error="download_failed"
+                )
+            )
+        except Exception as e:
+            results.append(
+                QualityCheckResult(
+                    image_url=str(image_url),
+                    ok=False,
+                    metrics={},
+                    error=str(e)
+                )
+            )
+
+    return results
 
 
 if __name__ == "__main__":
