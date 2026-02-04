@@ -32,7 +32,7 @@ def blur_score(gray: np.ndarray) -> float:
 def readability_prefilter(
     img_rgb: np.ndarray,
     min_mean: float = 100.0,
-    max_blur: float = 1.5,
+    max_blur: float = 25.0,
     max_noise: float = 1.0,
 ) -> Tuple[bool, Dict[str, float]]:
     # Hard-coded crop to remove fixed white borders.
@@ -72,7 +72,7 @@ def readability_prefilter(
 def check_images(
     image_paths: List[str],
     min_mean: float = 100.0,
-    max_blur: float = 1.5,
+    max_blur: float = 25.0,
     max_noise: float = 1.0,
 ) -> None:
     results = []
