@@ -32,7 +32,7 @@ def blur_score(gray: np.ndarray) -> float:
 def readability_prefilter(
     img_rgb: np.ndarray,
     min_mean: float = 100.0,
-    max_blur: float = 20.0,
+    max_blur: float = 1.5,
     max_noise: float = 1.0,
 ) -> Tuple[bool, Dict[str, float]]:
     # Hard-coded crop to remove fixed white borders.
@@ -53,14 +53,6 @@ def readability_prefilter(
     mean = float(gray.mean())
     std = float(gray.std())
     blur = blur_score(gray)
-    blue_mean = float(img_rgb[:, :, 2].mean())
-    dark_pixel_ratio = float((gray < 15).mean())
-    sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
-    sobel_y = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
-    gx = convolve2d(gray, sobel_x)
-    gy = convolve2d(gray, sobel_y)
-    edge_mag = np.sqrt(gx**2 + gy**2)
-    edge_density = float((edge_mag > 100).mean())
     gray_uint8 = np.clip(gray, 0, 255).astype(np.uint8)
     blur_gray = np.array(Image.fromarray(gray_uint8).filter(ImageFilter.GaussianBlur(radius=1)))
     high_freq = gray - blur_gray.astype(np.float32)
@@ -70,9 +62,6 @@ def readability_prefilter(
         "mean": mean,
         "std": std,
         "blur": blur,
-        "blue_mean": blue_mean,
-        "dark_pixel_ratio": dark_pixel_ratio,
-        "edge_density": edge_density,
         "noise_estimate": noise_estimate,
     }
 
@@ -83,7 +72,7 @@ def readability_prefilter(
 def check_images(
     image_paths: List[str],
     min_mean: float = 100.0,
-    max_blur: float = 20.0,
+    max_blur: float = 1.5,
     max_noise: float = 1.0,
 ) -> None:
     results = []
@@ -108,9 +97,6 @@ def check_images(
                 "mean": round(metrics["mean"], 4),
                 "std": round(metrics["std"], 4),
                 "blur": round(metrics["blur"], 4),
-                "blue_mean": round(metrics["blue_mean"], 4),
-                "dark_pixel_ratio": round(metrics["dark_pixel_ratio"], 6),
-                "edge_density": round(metrics["edge_density"], 6),
                 "noise_estimate": round(metrics["noise_estimate"], 4),
             }
         )
