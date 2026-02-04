@@ -4,7 +4,7 @@ Run with: uvicorn api_server:app --host 0.0.0.0 --port 8000
 Or: python api_server.py
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 from typing import List, Optional
@@ -34,6 +34,18 @@ quality_spec = importlib.util.spec_from_file_location(
 quality_checker = importlib.util.module_from_spec(quality_spec)
 quality_spec.loader.exec_module(quality_checker)
 readability_prefilter = quality_checker.readability_prefilter
+
+# API Key authentication
+API_KEY = os.getenv("API_KEY", "")
+
+def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
+    """Verify API key from X-API-Key header."""
+    if not API_KEY:
+        # If no API key is set in environment, allow all requests (dev mode)
+        return True
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return True
 
 app = FastAPI(
     title="bordi.ai Image Processing API",
@@ -118,9 +130,11 @@ async def health_check():
 
 
 @app.post("/process-image", response_model=ProcessImageResponse)
-async def process_image(request_body: ProcessImageRequest):
+async def process_image(request_body: ProcessImageRequest, authenticated: bool = Depends(verify_api_key)):
     """
     Process a habit tracking image by cropping cells and classifying them.
+    
+    Requires X-API-Key header for authentication.
     
     Accepts JSON body:
     - **user_id**: The user ID to look up crop values in image_crop_values table
@@ -138,10 +152,12 @@ async def process_image(request_body: ProcessImageRequest):
 
 
 @app.get("/process-image")
-async def process_image_get(user_id: str, image_url: str):
+async def process_image_get(user_id: str, image_url: str, authenticated: bool = Depends(verify_api_key)):
     """
     GET endpoint for image processing (alternative to POST).
     Useful for testing or simple integrations.
+    
+    Requires X-API-Key header for authentication.
     """
     try:
         result = process_habit_image(user_id, image_url)
@@ -153,10 +169,12 @@ async def process_image_get(user_id: str, image_url: str):
 
 
 @app.post("/quality-check", response_model=List[QualityCheckResult])
-async def quality_check(request_body: QualityCheckRequest):
+async def quality_check(request_body: QualityCheckRequest, authenticated: bool = Depends(verify_api_key)):
     """
     Evaluate image quality for multiple images.
     Returns pass/fail plus metrics for each image.
+    
+    Requires X-API-Key header for authentication.
     """
     results: List[QualityCheckResult] = []
     for image_url in request_body.image_urls:
