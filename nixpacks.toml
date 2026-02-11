@@ -1,0 +1,7 @@
+[phases.install]
+cmds = [
+  "pip install --upgrade pip",
+  "pip install opencv-python-headless>=4.8.0",
+  "pip install -r requirements.txt",
+  "pip uninstall -y opencv-python || true"
+]
