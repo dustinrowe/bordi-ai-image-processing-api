@@ -11,10 +11,7 @@ requests>=2.31.0
 # Database dependencies
 supabase>=2.0.0
 
-# Roboflow for model training
-# NOTE: Install roboflow with --no-deps to avoid opencv-python conflict
-roboflow>=1.1.0
-opencv-python-headless>=4.8.0
+# Roboflow upload via REST API (no SDK needed)
 
 # Optional OCR dependencies (if needed)
 paddleocr>=2.7.0

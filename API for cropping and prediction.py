@@ -7,7 +7,6 @@ from datetime import datetime
 from PIL import Image
 import numpy as np
 from supabase import create_client, Client
-from roboflow import Roboflow
 
 def get_max_side_length(pts):
     """Get width and height for the quadrilateral as max of opposite sides"""
@@ -230,20 +229,30 @@ def process_habit_image(user_id: str, image_url: str):
                     if confidence < 0.85:
                         try:
                             roboflow_api_key = os.getenv('ROBOFLOW_UPLOAD_API_KEY')
-                            roboflow_workspace = os.getenv('ROBOFLOW_WORKSPACE')
                             roboflow_project = os.getenv('ROBOFLOW_PROJECT')
                             
-                            if roboflow_api_key and roboflow_workspace and roboflow_project:
-                                rf = Roboflow(api_key=roboflow_api_key)
-                                project = rf.workspace(roboflow_workspace).project(roboflow_project)
+                            if roboflow_api_key and roboflow_project:
+                                # Read image as base64
+                                with open(cropped_filepath, 'rb') as img_file:
+                                    img_b64 = base64.b64encode(img_file.read()).decode('utf-8')
                                 
-                                # Upload the cropped image
-                                project.upload(
-                                    image_path=cropped_filepath,
-                                    annotation_path=None,
-                                    split="train",
-                                    tag_names=["low_confidence", f"conf_{int(confidence*100)}"]
+                                upload_url = (
+                                    f"https://api.roboflow.com/dataset/{roboflow_project}/upload"
+                                    f"?api_key={roboflow_api_key}"
+                                    f"&name={cell_id}.png"
+                                    f"&split=train"
+                                    f"&tag=low_confidence"
+                                    f"&tag=conf_{int(confidence*100)}"
                                 )
+                                upload_resp = requests.post(
+                                    upload_url,
+                                    data=img_b64,
+                                    headers={"Content-Type": "application/x-www-form-urlencoded"}
+                                )
+                                if upload_resp.status_code == 200:
+                                    print(f"Uploaded {cell_id} to Roboflow (conf: {confidence:.2f})")
+                                else:
+                                    print(f"Roboflow upload failed for {cell_id}: {upload_resp.status_code} {upload_resp.text}")
                         except Exception as upload_error:
                             # Don't fail the entire request if upload fails
                             print(f"Failed to upload {cell_id} to Roboflow: {upload_error}")
