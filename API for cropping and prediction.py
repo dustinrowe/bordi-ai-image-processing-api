@@ -7,6 +7,7 @@ from datetime import datetime
 from PIL import Image
 import numpy as np
 from supabase import create_client, Client
+from roboflow import Roboflow
 
 def get_max_side_length(pts):
     """Get width and height for the quadrilateral as max of opposite sides"""
@@ -224,6 +225,28 @@ def process_habit_image(user_id: str, image_url: str):
                         total_true += 1
                     elif pred_class == 'false':
                         total_false += 1
+                    
+                    # Upload low-confidence crops to Roboflow for retraining
+                    if confidence < 0.85:
+                        try:
+                            roboflow_api_key = os.getenv('ROBOFLOW_UPLOAD_API_KEY')
+                            roboflow_workspace = os.getenv('ROBOFLOW_WORKSPACE')
+                            roboflow_project = os.getenv('ROBOFLOW_PROJECT')
+                            
+                            if roboflow_api_key and roboflow_workspace and roboflow_project:
+                                rf = Roboflow(api_key=roboflow_api_key)
+                                project = rf.workspace(roboflow_workspace).project(roboflow_project)
+                                
+                                # Upload the cropped image
+                                project.upload(
+                                    image_path=cropped_filepath,
+                                    annotation_path=None,
+                                    split="train",
+                                    tag_names=["low_confidence", f"conf_{int(confidence*100)}"]
+                                )
+                        except Exception as upload_error:
+                            # Don't fail the entire request if upload fails
+                            print(f"Failed to upload {cell_id} to Roboflow: {upload_error}")
             except Exception as e:
                 # If parsing fails, continue with empty predictions
                 pass
