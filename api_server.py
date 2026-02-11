@@ -12,6 +12,8 @@ import sys
 import os
 import requests
 import numpy as np
+from PIL import Image
+import io
 
 # Import the processing function from the existing module
 # Handle filename with spaces by using importlib
