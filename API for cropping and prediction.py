@@ -187,11 +187,11 @@ def process_habit_image(user_id: str, image_url: str):
         cropped.save(buffer, format='PNG')
         img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         
-        # Send to Roboflow API (base64 data as raw body, like curl -d @-)
+        # Send to Roboflow Serverless API with base64 image
         response = requests.post(
             roboflow_url,
             data=img_base64,
-            headers={'Content-Type': 'text/plain'}
+            headers={'Content-Type': 'application/x-www-form-urlencoded'}
         )
         
         # Parse response (cell_id already defined above)
